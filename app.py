@@ -597,6 +597,10 @@ async def claude_messages(req: ClaudeRequest, account: Dict[str, Any] = Depends(
                 async for sse in handler.finish():
                     yield sse
                 await _update_stats(account["id"], True)
+            except GeneratorExit:
+                # Client disconnected, ensure cleanup happens in replicate.py's finally block
+                await _update_stats(account["id"], tracker.has_content if tracker else False)
+                raise
             except Exception:
                 await _update_stats(account["id"], False)
                 raise
@@ -757,6 +761,10 @@ async def chat_completions(req: ChatCompletionRequest, account: Dict[str, Any] =
                     })
                     yield "data: [DONE]\n\n"
                     await _update_stats(account["id"], True)
+                except GeneratorExit:
+                    # Client disconnected, ensure cleanup happens in replicate.py's finally block
+                    await _update_stats(account["id"], tracker.has_content if tracker else False)
+                    raise
                 except Exception:
                     await _update_stats(account["id"], tracker.has_content if tracker else False)
                     raise

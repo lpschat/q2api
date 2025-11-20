@@ -258,6 +258,7 @@ async def send_chat_request(
     # Use manual request sending to control stream lifetime
     req = client.build_request("POST", url, headers=headers, content=payload_str)
     
+    resp = None
     try:
         resp = await client.send(req, stream=True)
         
@@ -275,7 +276,11 @@ async def send_chat_request(
         parser = AwsEventStreamParser()
         tracker = StreamTracker()
         
+        # Track if the response has been consumed to avoid double-close
+        response_consumed = False
+        
         async def _iter_events() -> AsyncGenerator[Any, None]:
+            nonlocal response_consumed
             try:
                 if EventStreamParser and extract_event_info:
                     # Use proper EventStreamParser
@@ -308,6 +313,7 @@ async def send_chat_request(
                 if not tracker.has_content:
                     raise
             finally:
+                response_consumed = True
                 await resp.aclose()
                 if local_client:
                     await client.aclose()
@@ -329,11 +335,17 @@ async def send_chat_request(
                 async for t in tracker.track(_iter_text()):
                     buf.append(t)
             finally:
-                # Ensure cleanup if not streamed
-                pass
+                # Ensure response is closed even if iteration is incomplete
+                if not response_consumed and resp:
+                    await resp.aclose()
+                    if local_client:
+                        await client.aclose()
             return "".join(buf), None, tracker, None
 
     except Exception:
+        # Critical: close response on any exception before generators are created
+        if resp and not resp.is_closed:
+            await resp.aclose()
         if local_client and client:
             await client.aclose()
         raise
