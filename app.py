@@ -462,9 +462,12 @@ async def _update_stats(account_id: str, success: bool) -> None:
 # Dependencies
 # ------------------------------------------------------------------------------
 
-async def require_account(authorization: Optional[str] = Header(default=None)) -> Dict[str, Any]:
-    bearer = _extract_bearer(authorization)
-    return await resolve_account_for_key(bearer)
+async def require_account(
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None)
+) -> Dict[str, Any]:
+    key = _extract_bearer(authorization) if authorization else x_api_key
+    return await resolve_account_for_key(key)
 
 # ------------------------------------------------------------------------------
 # OpenAI-compatible Chat endpoint
