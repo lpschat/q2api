@@ -127,11 +127,18 @@ def convert_tool(tool: ClaudeTool) -> Dict[str, Any]:
         }
     }
 
-def merge_user_messages(messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+def merge_user_messages(messages: List[Dict[str, Any]], hint: str = THINKING_HINT) -> Dict[str, Any]:
     """Merge consecutive user messages, keeping only the last 2 messages' images.
     
     IMPORTANT: This function properly merges toolResults from all messages to prevent
     losing tool execution history, which would cause infinite loops.
+    
+    When merging messages that contain thinking hints, removes duplicate hints and 
+    ensures only one hint appears at the end of the merged content.
+    
+    Args:
+        messages: List of user messages to merge
+        hint: The thinking hint string to deduplicate
     """
     if not messages:
         return {}
@@ -163,16 +170,27 @@ def merge_user_messages(messages: List[Dict[str, Any]]) -> Dict[str, Any]:
         if base_model is None:
             base_model = msg.get("modelId")
         
+        # Remove thinking hint from individual message content to avoid duplication
+        # The hint will be added once at the end of the merged content
         if content:
-            all_contents.append(content)
+            content_cleaned = content.replace(hint, "").strip()
+            if content_cleaned:
+                all_contents.append(content_cleaned)
         
         # Collect images from each message
         msg_images = msg.get("images")
         if msg_images:
             all_images.append(msg_images)
     
+    # Merge content and ensure thinking hint appears only once at the end
+    merged_content = "\n\n".join(all_contents)
+    # Check if any of the original messages had the hint (indicating thinking was enabled)
+    had_thinking_hint = any(hint in msg.get("content", "") for msg in messages)
+    if had_thinking_hint:
+        merged_content = _append_thinking_hint(merged_content, hint)
+    
     result = {
-        "content": "\n\n".join(all_contents),
+        "content": merged_content,
         "userInputMessageContext": base_context or {},
         "origin": base_origin or "CLI",
         "modelId": base_model
@@ -332,13 +350,13 @@ def process_history(messages: List[ClaudeMessage], thinking_enabled: bool = Fals
             pending_user_msgs.append(item["userInputMessage"])
         elif "assistantResponseMessage" in item:
             if pending_user_msgs:
-                merged = merge_user_messages(pending_user_msgs)
+                merged = merge_user_messages(pending_user_msgs, hint)
                 history.append({"userInputMessage": merged})
                 pending_user_msgs = []
             history.append(item)
             
     if pending_user_msgs:
-        merged = merge_user_messages(pending_user_msgs)
+        merged = merge_user_messages(pending_user_msgs, hint)
         history.append({"userInputMessage": merged})
         
     return history
