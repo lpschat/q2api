@@ -45,7 +45,7 @@ def merge_user_messages(user_messages: List[Dict[str, Any]]) -> Dict[str, Any]:
 
         # Preserve first message's origin
         if base_origin is None:
-            base_origin = msg.get("origin", "CLI")
+            base_origin = msg.get("origin", "KIRO_CLI")
 
         # Preserve first message's modelId
         if base_model is None and "modelId" in msg:
@@ -67,7 +67,7 @@ def merge_user_messages(user_messages: List[Dict[str, Any]]) -> Dict[str, Any]:
     merged_msg = {
         "content": merged_content,
         "userInputMessageContext": base_context or {},
-        "origin": base_origin or "CLI"
+        "origin": base_origin or "KIRO_CLI"
     }
 
     # Add merged toolResults if any
