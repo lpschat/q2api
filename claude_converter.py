@@ -286,9 +286,14 @@ def process_history(messages: List[ClaudeMessage], thinking_enabled: bool = Fals
                                     elif isinstance(item, str):
                                         aq_content.append({"text": item})
                             
+                            # Check if there's actual content
                             if not any(i.get("text", "").strip() for i in aq_content):
-                                aq_content = [{"text": "Tool use was cancelled by the user"}]
-                                
+                                # Use different message based on status
+                                if block.get("status") != "error" and not block.get("is_error"):
+                                    aq_content = [{"text": "Command executed successfully"}]
+                                else:
+                                    aq_content = [{"text": "Tool use was cancelled by the user"}]
+
                             # Merge if exists
                             existing = next((r for r in tool_results if r["toolUseId"] == tool_use_id), None)
                             if existing:
@@ -468,9 +473,14 @@ def convert_claude_to_amazonq_request(req: ClaudeRequest, conversation_id: Optio
                                 elif isinstance(item, str):
                                     aq_content.append({"text": item})
                                     
+                        # Check if there's actual content
                         if not any(i.get("text", "").strip() for i in aq_content):
-                            aq_content = [{"text": "Tool use was cancelled by the user"}]
-                            
+                            # Use different message based on status
+                            if block.get("status") != "error" and not block.get("is_error"):
+                                aq_content = [{"text": "Command executed successfully"}]
+                            else:
+                                aq_content = [{"text": "Tool use was cancelled by the user"}]
+
                         existing = next((r for r in tool_results if r["toolUseId"] == tid), None)
                         if existing:
                             existing["content"].extend(aq_content)
