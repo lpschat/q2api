@@ -392,7 +392,18 @@ def process_history(messages: List[ClaudeMessage], thinking_enabled: bool = Fals
     pending_user_msgs = []
     for item in raw_history:
         if "userInputMessage" in item:
-            pending_user_msgs.append(item["userInputMessage"])
+            user_msg = item["userInputMessage"]
+            has_tool_results = bool(
+                user_msg.get("userInputMessageContext", {}).get("toolResults")
+            )
+            if has_tool_results:
+                if pending_user_msgs:
+                    merged = merge_user_messages(pending_user_msgs, hint)
+                    history.append({"userInputMessage": merged})
+                    pending_user_msgs = []
+                history.append(item)
+            else:
+                pending_user_msgs.append(user_msg)
         elif "assistantResponseMessage" in item:
             if pending_user_msgs:
                 merged = merge_user_messages(pending_user_msgs, hint)
@@ -405,6 +416,35 @@ def process_history(messages: List[ClaudeMessage], thinking_enabled: bool = Fals
         history.append({"userInputMessage": merged})
         
     return history
+
+def _validate_history_alternation(history: List[Dict[str, Any]]) -> None:
+    """Validate that history messages alternate correctly (user-assistant-user-assistant...).
+
+    This prevents infinite loops caused by malformed message ordering where tool_result
+    ends up above the user message, causing the model to keep executing the same instruction.
+
+    Raises:
+        ValueError: If messages don't alternate properly
+    """
+    if not history:
+        return
+
+    prev_role = None
+    for idx, item in enumerate(history):
+        if "userInputMessage" in item:
+            current_role = "user"
+        elif "assistantResponseMessage" in item:
+            current_role = "assistant"
+        else:
+            continue
+
+        if prev_role == current_role:
+            raise ValueError(
+                f"Message {idx} violates alternation rule: consecutive {current_role} messages. "
+                f"This may indicate malformed message ordering that could cause infinite loops."
+            )
+        prev_role = current_role
+
 
 def _detect_tool_call_loop(messages: List[ClaudeMessage], threshold: int = 3) -> Optional[str]:
     """Detect if the same tool is being called repeatedly (potential infinite loop).
@@ -577,7 +617,10 @@ def convert_claude_to_amazonq_request(req: ClaudeRequest, conversation_id: Optio
     # 7. History
     history_msgs = req.messages[:-1] if len(req.messages) > 1 else []
     aq_history = process_history(history_msgs, thinking_enabled=thinking_enabled, hint=THINKING_HINT)
-    
+
+    # Validate history alternation to prevent infinite loops
+    _validate_history_alternation(aq_history)
+
     # 8. Final Body
     return {
         "conversationState": {
