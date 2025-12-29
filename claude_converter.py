@@ -328,13 +328,9 @@ def process_history(messages: List[ClaudeMessage], thinking_enabled: bool = Fals
     Dual-mode detection:
     - If messages already alternate correctly (no consecutive user/assistant), skip merging
     - If messages have consecutive same-role messages, apply merge logic
-
-    Key fix: Track seen_tool_result_ids across ALL messages to prevent duplicate tool_results
-    that cause infinite loops where the model keeps responding to the same user message.
     """
     history = []
     seen_tool_use_ids = set()  # Track tool_use IDs in assistant messages
-    seen_tool_result_ids = set()  # Track tool_result IDs across ALL user messages
 
     raw_history = []
 
@@ -358,10 +354,6 @@ def process_history(messages: List[ClaudeMessage], thinking_enabled: bool = Fals
                             text_parts.append(_wrap_thinking_content(block.get("thinking", "")))
                         elif btype == "tool_result":
                             tool_use_id = block.get("tool_use_id")
-                            # Skip if this tool_result was already processed in a previous message
-                            if tool_use_id and tool_use_id in seen_tool_result_ids:
-                                logger.debug(f"Skipping duplicate tool_result across messages: {tool_use_id}")
-                                continue
 
                             if tool_results is None:
                                 tool_results = []
@@ -374,10 +366,6 @@ def process_history(messages: List[ClaudeMessage], thinking_enabled: bool = Fals
                                     existing["status"] = "error"
                             else:
                                 tool_results.append(result)
-
-                            # Mark as processed globally
-                            if tool_use_id:
-                                seen_tool_result_ids.add(tool_use_id)
                 text_content = "\n".join(text_parts)
             else:
                 text_content = extract_text_from_content(content)
