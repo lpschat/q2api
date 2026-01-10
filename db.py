@@ -372,12 +372,26 @@ async def close_db() -> None:
         _db = None
 
 
+# Column name mapping for PostgreSQL compatibility
+# PostgreSQL lowercases unquoted identifiers, so we need to map them back
+_COLUMN_NAME_MAP = {
+    "clientid": "clientId",
+    "clientsecret": "clientSecret",
+    "refreshtoken": "refreshToken",
+    "accesstoken": "accessToken",
+}
+
+
 # Helper functions for common operations
 def row_to_dict(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Convert a database row to dict with JSON parsing for 'other' field."""
     if row is None:
         return None
     d = dict(row)
+    # Normalize column names (PostgreSQL returns lowercase)
+    for lower_name, camel_name in _COLUMN_NAME_MAP.items():
+        if lower_name in d and camel_name not in d:
+            d[camel_name] = d.pop(lower_name)
     if d.get("other"):
         try:
             d["other"] = json.loads(d["other"])
