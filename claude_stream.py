@@ -90,6 +90,7 @@ class ClaudeStreamHandler:
         self.tool_name: Optional[str] = None
         self._processed_tool_use_ids: Set[str] = set()
         self.all_tool_inputs: List[str] = []
+        self.has_tool_use: bool = False  # Track if any tool_use was emitted
 
         # Think tag state
         self.in_think_block: bool = False
@@ -265,6 +266,7 @@ class ClaudeStreamHandler:
                 self.tool_input_buffer = []
                 self.content_block_stop_sent = False
                 self.content_block_start_sent = True
+                self.has_tool_use = True  # Mark that we have tool_use
 
             # Accumulate input
             if self.current_tool_use and tool_input:
@@ -306,7 +308,9 @@ class ClaudeStreamHandler:
             full_text = "".join(self.response_buffer)
             full_tool_input = "".join(self.all_tool_inputs)
             output_tokens = count_tokens(full_text) + count_tokens(full_tool_input)
-            yield build_message_stop(self.input_tokens, output_tokens, "end_turn")
+            # Use "tool_use" stop_reason if any tool_use was emitted, otherwise "end_turn"
+            stop_reason = "tool_use" if self.has_tool_use else "end_turn"
+            yield build_message_stop(self.input_tokens, output_tokens, stop_reason)
 
     async def finish(self) -> AsyncGenerator[str, None]:
         """Send final events."""
@@ -348,4 +352,6 @@ class ClaudeStreamHandler:
         # output_tokens = max(1, (len(full_text) + len(full_tool_input)) // 4)
         output_tokens = count_tokens(full_text) + count_tokens(full_tool_input)
 
-        yield build_message_stop(self.input_tokens, output_tokens, "end_turn")
+        # Use "tool_use" stop_reason if any tool_use was emitted, otherwise "end_turn"
+        stop_reason = "tool_use" if self.has_tool_use else "end_turn"
+        yield build_message_stop(self.input_tokens, output_tokens, stop_reason)
